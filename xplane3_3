@@ -1,0 +1,303 @@
+% Hyo Note Oct 2014:  This is the latest version I had on qaqisaq 
+
+function xplane3_3_new(subjID, sequence, randseed, run) 
+%Third person version of xplane, with some modification to be re-run in Feb
+%2012. 
+
+% xplane3_1 and 3_2 are run outside the scanner. 
+% xplane3_1 (reveal part) is 3 sec whole picture and 3 sec part picture.
+% xplane3_2 (word part) now uses yoked response from xplane2 (self)
+% participants as "fake response".
+% xplane3_3 is the same, run inside the scanner, except with more emphasis
+% on thinking about "other" vs "new".
+%
+% CONDITIONS:
+% (1) Misleading - m
+% (2) Ambiguous - a
+% (3) Veridical - v
+% (4) New - n
+% (24*16) + 10 = 394 s | 197 ips
+ 
+%% Experiment Parameters
+rootdir = '~/Documents/Experiments/xplane3';
+stimdir = fullfile(rootdir,'stimuli');
+misleadingdir = fullfile(stimdir,'misleading');
+veridicaldir = fullfile(stimdir,'veridical');
+ambiguousdir = fullfile(stimdir,'ambiguous');
+newdir = fullfile(stimdir, 'new');
+rand('twister', randseed);
+
+keynums = [25:36 89:95]; %keyboard key numbers that correspond to 1~4 buttons and scanner buttons
+
+
+designs = [1 2 3 4 4 3 2 1 2 4 1 3 3 1 4 2 3 4 2 1 1 2 4 3;
+    4 3 2 1 1 2 3 4 3 1 4 2 2 4 1 3 1 2 4 3 3 4 2 1];
+itemcounter = zeros(4,2);
+
+if run==1
+    itemorder{1} = reshape(Shuffle(1:12),6,2); % m
+    itemorder{2} = reshape(Shuffle(1:12),6,2); % a
+    itemorder{3} = reshape(Shuffle(1:12),6,2); % v
+    itemorder{4} = reshape(Shuffle(1:12),6,2); % n
+    repeatrun = 0;
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new.' num2str(run) '.mat'],'itemorder');
+elseif run ==2
+    load([rootdir '/behavioural_new/' subjID '.xplane3_3_new.1.mat'],'itemorder')
+    repeatrun = 0;
+    
+elseif run==3 % if we have enough time, we will present same stimuli for the second time.
+    load([rootdir '/behavioural_new/' subjID '.xplane3_3_new.1.mat'],'itemorder')
+    run = 1;
+    repeatrun = 1; % chagerun == 1
+else  % if run == 3, present run1 again, run==4, present run2 again.
+    load([rootdir '/behavioural_new/' subjID '.xplane3_3_new.1.mat'],'itemorder')
+    run = 2;
+    repeatrun = 1;
+end
+
+design = designs(sequence(run),:);
+
+% % for testing purposes....
+%  picDur = 2;
+%  fixDur = 1;
+%  trialsPerRun = 24;
+
+picDur = 6;
+fixDur = 10;
+trialsPerRun = 24;
+
+
+key = zeros(trialsPerRun,1);
+RT = zeros(trialsPerRun,1);
+
+condnames = {'1_misleading','2_ambiguous','3_veridical','4_new'};
+answers = '(1) He/She was right       (2) He/She was wrong       (3) This is new';
+
+
+%% PTB Stuff
+% Identify attached keyboard devices:
+devices=PsychHID('devices');
+[dev_names{1:length(devices)}]=deal(devices.usageName);
+kbd_devs = find(ismember(dev_names, 'Keyboard')==1);
+
+HideCursor;
+displays = Screen('screens');
+screenRect = Screen('rect', displays(end));
+[x0,y0] = RectCenter(screenRect);
+window = Screen('OpenWindow', displays(end), [0 0 0], screenRect, 32);
+
+instructions = 'In this part, you will see the pictures again with an arrow pointing to one of the objects in the picture. Some of the pictures you and the subject have seen previously; others are new. Please think back to what the subject might have thought about the object in the picture and choose one of the following:';
+answers_1 = '(1) He/She WAS RIGHT regarding the objects identity';
+answers_2 = '(2) He/She WAS WRONG regarding the objects identity';
+answers_3 = '(3) THIS IS NEW if you have not seen the picture before.';
+space_index = find(instructions == ' ');
+space_breaks = round(length(space_index)/5);
+Screen(window, 'TextSize', 36);
+Screen(window, 'DrawText', instructions(1:space_index(space_breaks)), x0-600, y0-200, 255);
+Screen(window, 'DrawText', instructions(space_index(space_breaks)+1:space_index(space_breaks*2)), x0-600, y0-150, 255);
+Screen(window, 'DrawText', instructions(space_index(space_breaks*2)+1:space_index(space_breaks*3)), x0-600, y0-100, 255);
+Screen(window, 'DrawText', instructions(space_index(space_breaks*3)+1:space_index(space_breaks*4)), x0-600, y0-50, 255);
+Screen(window, 'DrawText', instructions(space_index(space_breaks*4)+1:end), x0-600, y0, 255);
+Screen(window, 'DrawText', answers_1, x0-575, y0+100, 255);
+Screen(window, 'DrawText', answers_2, x0-575, y0+150, 255);
+Screen(window, 'DrawText', answers_3, x0-575, y0+200, 255);
+Screen('Flip',window);
+
+%% waiting for a date...with the trigger!!!
+while 1
+    FlushEvents;
+    trig = GetChar;
+    if trig == '+'
+        break
+    end
+end
+
+%fprintf('\nGettin triggered up in heeeeereee! Lets get it on, bitch.\n');
+experimentStart = GetSecs;
+picture_list = {};
+picture_num = [];
+%% Main Experiment
+for trial = 1:trialsPerRun
+    trialStart = GetSecs;
+    thiscondnum = design(trial); % this is the condition for the current trial
+    itemcounter(thiscondnum,run) = itemcounter(thiscondnum,run) + 1;
+    thisitem = itemorder{thiscondnum}(itemcounter(thiscondnum,run),run);
+    
+    if design(trial)==1
+        condstr = 'm';
+    elseif design(trial)==2
+        condstr = 'a';
+    elseif design(trial)==3
+        condstr = 'v';
+    else
+        cd(newdir);
+        condstr = 'n';
+    end
+    
+    % present fixation cross
+    DrawFormattedText(window,'+','center','center',255);
+    Screen('Flip',window);
+    
+    
+    while GetSecs - trialStart < fixDur;end
+    
+    highlight_pic_name = sprintf('%s_highlight_%d.jpg', condstr, thisitem);
+    %  highlight_pic_name = [fullfile(stimdir,condnames{design(trial)}) '/' sprintf('%s_highlight_%d.jpg',condnames{design(trial)}(1),itemorder{design(trial)}(itemcounter(design(trial),run),run))];
+    picture_list{trial} = highlight_pic_name;
+    picture_num(trial) = thisitem;
+    
+    
+    highlight_pic_array = imread(highlight_pic_name);
+    highlight_pic_texture = Screen('MakeTexture', window, highlight_pic_array);
+    Screen('DrawTexture', window, highlight_pic_texture, [], [x0-525 y0-400 x0+525 y0+250]);
+    [nx,ny]=DrawFormattedText(window, answers, 'center', y0+325);
+    
+    
+    % draw highlight pic to screen with answer choices
+    
+    responseStart = GetSecs;
+    
+    
+    Screen('Flip',window);
+    
+    
+    while GetSecs - trialStart < fixDur+picDur;
+        [keyIsDown,secs,keyCode] = KbCheck(-3);
+        %[button number ] = intersect([88:92], find(keyCode)); % 88:92 for the scanner
+        % old method
+%         button = intersect(keynums, find(keyCode));
+%         if(RT(trial,1) == 0) & button > 24  % 88 for scanner
+%             RT(trial,1) = GetSecs - responseStart;
+%             % key(trial,1) = KbName(button);
+%             thiskey = KbName(button);
+%             key(trial,1) = str2num(thiskey(1));
+%         end
+        % new method
+        if keyIsDown
+            button = find(keyCode);
+            button = KbName(button(1));
+            if any(button(1)=='1234')
+                if RT(trial,1)==0
+                    RT(trial,1) = GetSecs-responseStart;
+                    key(trial,1) = str2num(button(1));
+                end
+            end
+        end
+    end
+    
+    [key(trial,1); RT(trial,1)]
+    
+    if repeatrun == 0
+        save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new.' num2str(run) '.mat'],'picture_list','itemorder','key','RT');
+    end
+    
+end % trial loop ends here
+
+experimentEnd = GetSecs;
+DrawFormattedText(window,'+','center','center',255);
+Screen('Flip',window);
+while GetSecs - experimentEnd < fixDur; end % wait one last fixation
+experimentDuration = experimentEnd - experimentStart;
+% response_pic saves condition, key, and RT
+Response_pic = zeros(trialsPerRun,3); 
+Response_pic(:,1) = design';
+Response_pic(:,2) = key;
+Response_pic(:,3) = RT;
+
+%% SPM Info
+
+ips = 197;
+numconds = 4;
+realonsets = [6 14 22 30 38 46 54 62 70 78 86 94 102 110 118 126 134 142 150 158 166 174 182 190]';
+sortedonsets = sortrows([design' realonsets]);
+
+for index = 1:numconds
+    spm_inputs(index).name = condnames{index};
+    spm_inputs(index).ons = sortedonsets(find(sortedonsets(:,1)==index),2);
+    spm_inputs(index).dur = ones(trialsPerRun/numconds,1) * ((picDur) / 2);
+end
+
+con_info(1).name = 'Misleading > All';
+con_info(1).vals = [3 -1 -1 -1];
+con_info(2).name = 'All > New';
+con_info(2).vals = [1 1 1 -3];
+con_info(3).name = 'Misleading > New';
+con_info(3).vals = [1 0 0 -1];
+con_info(4).name = 'Ambiguous > New';
+con_info(4).vals = [0 1 0 -1];
+con_info(5).name = 'Veridical > New';
+con_info(5).vals = [0 0 1 -1];
+con_info(6).name = 'Misleading > Ambiguous';
+con_info(6).vals = [1 -1 0 0];
+con_info(7).name = 'Misleading > Veridical';
+con_info(7).vals = [1 0 -1 0];
+con_info(8).name = 'Misleading & Ambiguous > Verdical';
+con_info(8).vals = [1 1 -2 0];
+con_info(9).name = 'Ambiguous > Veridical';
+con_info(9).vals = [0 1 -1 0];
+con_info(10).name = 'Ambiguous > Misleading';
+con_info(10).vals = [-1 1 0 0];
+con_info(11).name = 'New > All';
+con_info(11).vals = [-1 -1 -1 3];
+
+
+sortedresponses = sortrows([design' key]);
+for x = 1:4
+    responses{x} = sortedresponses(find(sortedresponses(:,1)==x),2);
+end
+
+response_result = zeros(4,3); % save how many trials in each condition the subject answered "i was right, i was wrong, this is new".
+
+for i = 1:4
+    fprintf('\n%s\n',condnames{i});
+    fprintf('He/She was right: %d, He/She was wrong: %d, New: %d\n',length(find(responses{i}==1)),length(find(responses{i}==2)),length(find(responses{i}==3)));
+    for ii = 1:3
+        response_result(i,ii) = length(find(responses{i}==ii));
+    end
+end
+if repeatrun == 0; % if this is either run 1 or 2, then we save the behavioral file as usual
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new.' num2str(run) '.mat'],'picture_list','key','RT','subjID','sequence','run','design','itemorder','responses','experimentDuration','ips','spm_inputs','con_info', 'response_result');
+else  % if this is a repeated run, save separate behavioral files (repeated)
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new_repeat.' num2str(run) '.mat'],'picture_list','key','RT','subjID','sequence','run','design','itemorder','responses','experimentDuration','ips','spm_inputs','con_info', 'response_result');
+end
+
+
+
+%% save second behavioural file with response as condition
+
+
+clear spm_inputs; clear con_info;
+sortedonsets = [key realonsets]; % using key here instead of condition
+condnames = {'a_correct','b_incorrect','c_new'};
+numconds = 3;
+for index = 1:numconds
+    spm_inputs(index).name = condnames{index};
+    spm_inputs(index).ons = sortedonsets(find(sortedonsets(:,1)==index),2);
+    spm_inputs(index).dur = ones(length(spm_inputs(index).ons),1) * ((6) / 2);
+end
+
+con_info(1).name = 'Correct > Incorrect';
+con_info(1).vals = [1 -1 0];
+con_info(2).name = 'Correct > New';
+con_info(2).vals = [1 0 -1];
+con_info(3).name = 'Incorrect > Correct';
+con_info(3).vals = [-1 1 0];
+con_info(4).name = 'Incorrect > New';
+con_info(4).vals = [0 1 -1];
+con_info(5).name = 'New > Correct';
+con_info(5).vals = [-1 0 1];
+con_info(6).name = 'New > Incorrect';
+con_info(6).vals = [0 -1 1];
+con_info(7).name = 'All_New';
+con_info(7).vals = [1 1 -2]
+
+if repeatrun == 0
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new_response.' num2str(run) '.mat'],'picture_list','picture_num','key','RT','Response_pic','subjID','sequence','run','design','itemorder','experimentDuration','ips','spm_inputs','con_info', 'response_result');
+else
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_3_new_repeat_response.' num2str(run) '.mat'],'picture_list','picture_num','key','RT','Response_pic','subjID','sequence','run','design','itemorder','experimentDuration','ips','spm_inputs','con_info', 'response_result');
+end
+
+cd(rootdir);
+ShowCursor;
+clear all
+end
