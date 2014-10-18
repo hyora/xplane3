@@ -1,0 +1,357 @@
+
+%Hyo Note 2014:  this is the latest version from Qaqisaq
+function xplane3_2_new_fmri(subjID, run)
+
+
+% Third person version of xplane, run NOV 2012, to be run INSIDE the scanner
+% instead of loading yokedresponse.mat, it will load
+% subjID.xplane3_2_design.mat which includes the yoked responses tailored
+% to this person's counterbalanced design. (created by
+% create_design_xplane3_2_newfmri.m )
+
+% xplane3_1 is run outside the scanner. 
+% xplane3_1 (reveal part) is 3 sec whole picture and 3 sec part picture.
+% xplane3_2 (word part) now uses yoked response from xplane2 (self)
+% participants as "fake response", and is run IN THE SCANNER
+% xplane3_3 is the same, run inside the scanner, except with more emphasis
+% on thinking about "other" vs "new".
+
+
+%% xplane3_2_new is similar to xplane3_2, but the faked response is now
+% coming from an actual response of a person, specified in yokeID. you
+% first need to create the yokedresponse.mat file by using create_yokedresponse.mat.
+
+%% important note: since Shuffle was used without randseed to determine the
+% locations of the words, there is no way to recover exactly what word the
+% person chose if the person chose neither the lure nor the right word.
+% Therefore, to create the yoked response, it'll check if the response was
+% lure or not, and if not, just choose randomly between the two remaining
+% filler words.
+
+%in yokedresponse.mat, run1_partpic_name is the list of jpg filenames in 
+%the order of viewing, run1_yokedresponse is the design, RT, actual key,
+%right answer, lure answer.
+
+% Conditions:
+% 1 - misleading (m)
+% 2 - ambiguous (a)
+% 3 - veridical  (v)
+
+% (18 * (10 +8)) + 10 =  334 sec (167 ips)
+%% Stimuli Directories
+
+trialsPerRun = 18;
+fixDur = 10;
+picDur = 8;
+
+rootdir = '~/Documents/Experiments/xplane3';
+stimdir = fullfile(rootdir,'stimuli');
+%stimdir = '~/Documents/Experiments/Xplane/stimuli';
+behavdir = fullfile(rootdir, 'behavioural_new');
+
+%% load yoked participant's response from xplane2 behavioral file
+load(fullfile(behavdir,[subjID '.xplane3_2_design.mat']))
+
+if run==1 % for each condition, specifies which trial number will be picked out in a given trial. each column for each run.
+    save(fullfile(behavdir,[subjID '.xplane3_2_new.' num2str(run) '.mat']),'run1_partpic_name', 'run1_yokedresponse');
+    design = run1_yokedresponse(:,1)';
+    responselist(:,1) = run1_yokedresponse(:,6);  %responselist 1: right answer, 2: lure answer, 3: one of two fillers
+    responselist(:,2) = run1_yokedresponse(:,2);  % RT
+    partpic_list = run1_partpic_name;   %partpic_list column1: filename for jpg, 2: filename for .mat,  later we'll add: 3 ~6 : words in position 1:4
+    
+elseif run == 2
+    save(fullfile(behavdir,[subjID '.xplane3_2_new.' num2str(run) '.mat']),'run2_partpic_name', 'run2_yokedresponse');
+    design = run2_yokedresponse(:,1)';
+    responselist(:,1) = run2_yokedresponse(:,6);
+    responselist(:,2) = run2_yokedresponse(:,2);  % RT
+    partpic_list = run2_partpic_name;   %partpic_list column1: filename for jpg, 2: filename for .mat, 3 ~6 : words in position 1:4
+    
+end
+misleadingdir = fullfile(stimdir,'misleading');
+ambiguousdir = fullfile(stimdir,'ambiguous');
+veridicaldir = fullfile(stimdir,'veridical');
+keynums = [25:36 89:95]; %keyboard key numbers that correspond to 1~4 buttons and scanner buttons
+
+key_pic = zeros(trialsPerRun,4); % the confederate's response; right answer; lure answer; subject's button press
+RT_pic = zeros(trialsPerRun,1); %RT for all those stuff above
+
+condnames = {'1_misleading','2_ambiguous','3_veridical'};
+
+%% PTB Stuff
+
+% Identify attached keyboard devices:
+devices=PsychHID('devices');
+[dev_names{1:length(devices)}]=deal(devices.usageName);
+kbd_devs = find(ismember(dev_names, 'Keyboard')==1);
+
+HideCursor;
+displays = Screen('screens'); % (this will probably return "0" if you're not using an external monitor, and 0 1 if you have one.
+
+% so displays(end) will return 0 with just one monitor, return 1 if there
+% are two monitors. Here we want to use the external monitor if we do have
+% one.
+
+screenRect = Screen('rect', displays(end)); % get the screen size of the monitor we're presenting the data on.
+[x0,y0] = RectCenter(screenRect); %sets Center for screenRect (x,y)
+window=Screen('OpenWindow', displays(end),[0 0 0], screenRect, 32);
+% open up a window on the selected monitor, [0 0 0] is RGB color, so it's
+% black here, screenRect is for presenting it all over the screen, and we
+% always use 32-bit color.
+AssertOpenGL;
+magfactor=0.5;
+rate=1;
+
+%% the instruction
+if run == 1
+instruction1 = 'This participant is sitting in the waiting area. He/She will see just the "PART" pictures and choose a word that he/she thinks is most closely associated with the picture.'
+Screen('TextSize',window, 50);
+moviename = 'instruction.mov';
+[movie(1) movieduration fps imgw imgh] = Screen('OpenMovie', window , moviename);
+
+
+Screen('PlayMovie', movie(1), rate, 0, 0);
+FlushEvents;
+while(1)
+    [tex pts] = Screen('GetMovieImage', window, movie(1), 1);
+    if tex<=0
+        break;
+    end;
+    Screen('DrawTexture', window, tex, [], [x0-magfactor*imgw y0-magfactor*imgh-(screenRect(1,4)*.2) x0+magfactor*imgw y0+magfactor*imgh-(screenRect(1,4)*.2)]);
+    DrawFormattedText(window, instruction1, 'center',(screenRect(1,4)*.6),255,50,0,0,1.3);
+    Screen('Flip', window);
+    Screen('Close', tex);
+    if CharAvail()
+        trig = GetChar();
+        if any(trig=='+')
+            break
+        end
+    end     
+end % end while
+
+Screen('CloseMovie', movie(1));
+end
+Screen('TextSize',window, 50);
+
+instruction2 = 'Remember that this person never saw the "WHOLE" pictures, and he/she may be wrong or unsure about what the actual picture is about. \n Carefully watch as he/she chooses the answer. \n Get Ready!';
+DrawFormattedText(window, instruction2, 'center','center',255,50,0,0,1.3)
+Screen('Flip', window);
+
+
+%% Experiment
+
+% reset all keys, wait for trigger pulse from the scanner
+while 1
+    FlushEvents;
+    trig = GetChar;
+    if trig == '+'
+        break
+    end
+end
+
+experimentStart = GetSecs;
+
+% trial loop
+for trial = 1:trialsPerRun
+    trialStart = GetSecs;
+    %thiscondnum = design(trial);
+    %itemcounter(thiscondnum,run) = itemcounter(thiscondnum,run) + 1;
+    %thisitem = itemorder{thiscondnum}(itemcounter(thiscondnum,run),run);
+    % thiscondnum refers to which condition we're presenting in this trial.
+    % 1 is misleading and on
+    
+    if design(trial)==1
+        cd(misleadingdir);
+    elseif design(trial)==2
+        cd(ambiguousdir);
+    else
+        cd(veridicaldir);
+    end
+    
+    % present fixation cross
+    DrawFormattedText(window,'+','center','center',255);
+    Screen('Flip',window)
+    % imread the image for this trial
+    partpic_array = imread(partpic_list{trial,1});
+    % present the matrix on the screen
+    partpic = Screen('MakeTexture',window,partpic_array);
+    
+    Screen('DrawTexture',window,partpic,[],[x0-525 y0-400 x0+525 y0+250]);
+    % then you specify the font size to 40.
+    Screen('TextSize',window,40);
+    % load the words mat file - i.e. m_words_6.mat
+    load(partpic_list{trial,2});
+    
+    word_positions = Shuffle(1:4);
+    %word_positions is a random order of the numbers 1 to 4.
+    screenwidth = screenRect(3);
+    screenheight = screenRect(4);
+    word_x_pos = [x0-((screenwidth/16)*7) x0-((screenwidth/16)*3) x0+(screenwidth/16) x0 + ((screenwidth/16)*5)];
+
+    Screen(window,'DrawText',right,word_x_pos(1,word_positions(1)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',lure,word_x_pos(1,word_positions(2)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',filler1,word_x_pos(1,word_positions(3)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',filler2,word_x_pos(1,word_positions(4)),y0+300,[255 255 255]);
+    
+    % save the words in the order of positions (left to right) in partpic_list(:,3:6)
+    partpic_list{trial,word_positions(1)+2} = right;
+    partpic_list{trial,word_positions(2)+2} = lure;
+    partpic_list{trial,word_positions(3)+2} = filler1;
+    partpic_list{trial,word_positions(4)+2} = filler2;
+
+ 
+    key_pic(trial,2) = word_positions(1);
+    key_pic(trial,3) = word_positions(2);
+    % key_pic(:,1) is the correct answer for veridical trials, lure answer
+    % for misleading trials, and random choice between filler1 or filler2
+    % for ambiguous trials.
+    % this is the "fake choice" that the "confederate" makes.
+    
+    if responselist(trial,1) == 1;  % if yoked response is correct
+        key_pic(trial,1) = word_positions(1);  % this is the correct key press
+    elseif responselist(trial,1) == 2; % if yoked response is the lure
+        key_pic(trial,1) = word_positions(2);
+    else
+        key_pic(trial,1) = word_positions(round(rand)+3); %otherwise choose one of fillers
+    end
+    
+    % end fixation dur
+    while GetSecs - trialStart < fixDur; end
+    Screen('Flip',window);
+    
+    % now re-draw the screen with the square
+    Screen('DrawTexture',window,partpic,[],[x0-525 y0-400 x0+525 y0+250]);
+    Screen('TextSize',window,40);
+    Screen(window,'DrawText',right,word_x_pos(1,word_positions(1)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',lure,word_x_pos(1,word_positions(2)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',filler1,word_x_pos(1,word_positions(3)),y0+300,[255 255 255]);
+    Screen(window,'DrawText',filler2,word_x_pos(1,word_positions(4)),y0+300,[255 255 255]);
+    
+       
+    if key_pic(trial,1) == 1
+        rect = [word_x_pos(1)-40 y0+280 word_x_pos(1)+ 230 y0+360];
+    elseif key_pic(trial,1) == 2
+        rect = [word_x_pos(2)-40 y0+280 word_x_pos(2)+ 230 y0+360];
+    elseif key_pic(trial,1) == 3
+        rect = [word_x_pos(3)-40 y0+280 word_x_pos(3)+ 230 y0+360];
+    else
+        rect = [word_x_pos(4)-40 y0+280 word_x_pos(4)+ 230 y0+360];
+    end
+    
+    Screen('FrameRect', window,[200 100 100], rect, 5);
+    if responselist(trial,2) > 5
+        responselist(trial,2) = 5;
+    end
+    
+    while GetSecs - trialStart < fixDur + responselist(trial,2); end %using yoked RT as the RT of the fake response
+    Screen('Flip',window);
+
+    responseStart = GetSecs;
+
+    while GetSecs - trialStart < fixDur + picDur;
+         [keyIsDown,secs,keyCode] = KbCheck(-3);
+        button = intersect(keynums, find(keyCode));
+        if(RT_pic(trial,1) == 0) & button > 24 % 88 at the scanner, 24 for general
+            RT_pic(trial,1) = GetSecs - responseStart;
+            thiskey = KbName(button);
+            key_pic(trial,4) = str2num(thiskey(1));
+        end
+    end
+    key_pic(:,4)'
+end
+% trial loop
+
+experimentEnd = GetSecs;
+
+DrawFormattedText(window,'+','center','center',255);
+Screen('Flip',window);
+while GetSecs - experimentEnd < fixDur; end % last fixation
+
+experimentDuration = experimentEnd - experimentStart;
+
+Response_pic = zeros(trialsPerRun,4); 
+% response_pic saves condition, confederate's choice, subject's choice, and RT
+Response_pic(:,1) = design';
+Response_pic(:,2) = key_pic(:,1);
+Response_pic(:,3) = key_pic(:,4);
+Response_pic(:,4) = RT_pic;
+
+
+%% SPM info
+
+ips = 167;
+numconds = 3;
+%realonsets = [6 14 22 30 38 46 54 62 70 78 86 94 102 110 118 126 134 142]';
+realonsets = [6,15,24,33,42,51,60,69,78,87,96,105,114,123,132,141,150,159]';
+
+for i = 1:length(realonsets)
+    confederateonsets(i,1) = realonsets(i,1) + responselist(i,2);
+end
+
+sortedonsets = sortrows([design' realonsets]);
+
+con_info(1).name = 'Misleading > Veridical';
+con_info(1).vals = [1 0 -1];
+con_info(2).name = 'Misleading > Ambiguous';
+con_info(2).vals = [1 -1 0];
+con_info(3).name = 'Misleading > Ambiguous & Veridical';
+con_info(3).vals = [2 -1 -1];
+con_info(4).name = 'Ambiguous > Misleading';
+con_info(4).vals = [-1 1 0];
+con_info(5).name = 'Ambiguous > Veridical';
+con_info(5).vals = [0 1 -1];
+con_info(6).name = 'Veridical > Misleading';
+con_info(6).vals = [-1 0 1];
+con_info(7).name = 'Veridical > Ambiguous';
+con_info(7).vals = [0 -1 1];
+con_info(8).name = 'Misleading, Ambiguous > Veridical';
+con_info(8).vals = [1 1 -2];
+con_info(9).name = 'Veridical > Misleading, Ambiguous';
+con_info(9).vals = [-1 -1 2];
+
+
+%% saving regular file
+
+for index = 1:numconds
+    spm_inputs(index).name = condnames{index};
+    spm_inputs(index).ons = sortedonsets(find(sortedonsets(:,1)==index),2);
+    spm_inputs(index).dur = ones(trialsPerRun/numconds,1) * ((picDur) / 2);
+end
+
+
+save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_2_new2.' num2str(run) '.mat'],'responselist','key_pic','RT_pic','Response_pic','subjID','yokeID','run', 'partpic_list','experimentDuration','word_positions','ips','spm_inputs','con_info');
+
+
+%% now just modeling before the confederate answer
+
+clear spm_inputs sortedonsets;
+beforeDur = 2;
+beforeonsets = realonsets;
+sortedonsets = sortrows([design' beforeonsets]);
+
+for index = 1:numconds
+    spm_inputs(index).name = condnames{index};
+    spm_inputs(index).ons = sortedonsets(find(sortedonsets(:,1)==index),2);
+    spm_inputs(index).dur = ones(trialsPerRun/numconds,1) * ((beforeDur) / 2);
+end
+
+save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_2_new2_before.' num2str(run) '.mat'],'responselist','key_pic','RT_pic','Response_pic','subjID','yokeID','run', 'partpic_list','experimentDuration','word_positions','ips','spm_inputs','con_info');
+
+%% now just modeling after the confederate answer
+
+clear spm_inputs sortedonsets;
+afterDur = 3;
+sortedonsets = sortrows([design' confederateonsets]);
+
+for index = 1:numconds
+    spm_inputs(index).name = condnames{index};
+    spm_inputs(index).ons = sortedonsets(find(sortedonsets(:,1)==index),2);
+    spm_inputs(index).dur = ones(trialsPerRun/numconds,1) * ((afterDur) / 2);
+end
+
+save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_2_new2_after.' num2str(run) '.mat'],'responselist','key_pic','RT_pic','Response_pic','subjID','yokeID','run','partpic_list','experimentDuration','word_positions','ips','spm_inputs','con_info');
+
+ShowCursor;
+cd(rootdir);
+clear all
+
+end
