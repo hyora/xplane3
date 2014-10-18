@@ -1,0 +1,195 @@
+function xplane3_1_new_singlerun(subjID, randseed)
+
+%Third person version of xplane, with some modification to be re-run in Feb
+%2012. 
+
+% xplane3_1 and 3_2 are run outside the scanner. 
+% xplane3_1 (reveal part) is 3 sec whole picture and 3 sec part picture.
+% xplane3_2 (word part) now uses yoked response from xplane2 (self)
+% participants as "fake response".
+% xplane3_3 is the same, run inside the scanner, except with more emphasis
+% on thinking about "other" vs "new".
+
+% Conditions:
+% 1 - misleading (m)
+% 2 - ambiguous (a)
+% 3 - veridica  (v)
+
+% (18 * (10+3+3)) + 10 = 298 sec  (149 ips)
+
+%% Stimuli Directories
+rand('twister', randseed);
+rootdir = '~/Documents/Experiments/xplane3';
+stimdir = fullfile(rootdir,'stimuli');
+
+misleadingdir = fullfile(stimdir,'misleading');
+veridicaldir  = fullfile(stimdir,'veridical');
+ambiguousdir  = fullfile(stimdir,'ambiguous');
+keynums = [25:36 89:95]; %keyboard key numbers that correspond to 1~4 buttons and scanner buttons
+
+run = 1;
+designs = [1 2 3 3 2 1 2 1 3 1 3 2 3 2 1 1 2 3; % order of conditions in each trial, for each run
+           3 1 2 2 1 3 2 3 1 2 3 1 1 2 3 3 2 1];
+if mod(ceil(GetSecs),2) == 0
+       design = [designs(1,:) designs(2,:)]; % design (order or conditions) for the current run
+else
+    design = [designs(2,:) designs(1,:)]
+end
+
+itemcounter = zeros(3,2);
+
+% for each condition, specifies which trial number will be picked out in a given trial. each column for each run.
+    itemorder{1} = reshape(Shuffle(1:12),12,1); % m
+    itemorder{2} = reshape(Shuffle(1:12),12,1); % a
+    itemorder{3} = reshape(Shuffle(1:12),12,1); % v
+    save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_1_new_singlerun.mat'],'itemorder');
+
+trialsPerRun    = 18*2;
+fixDur  = 5;% fixation was set to 5 sec instead of 10, since it'll be behavioral
+partpicDur = 3;
+wholepicDur = 3;
+picDur = partpicDur + wholepicDur;
+condnames = {'1_misleading','2_ambiguous','3_veridical'};
+
+%% PTB Stuff
+
+% Identify attached keyboard devices:
+devices=PsychHID('devices');
+[dev_names{1:length(devices)}]=deal(devices.usageName);
+kbd_devs = find(ismember(dev_names, 'Keyboard')==1 );
+
+HideCursor;
+displays = Screen('screens'); % (this will probably return "0" if you're not using an external monitor, and 0 1 if you have one.
+% so displays(end) will return 0 with just one monitor, return 1 if there
+% are two monitors. Here we want to use the external monitor if we do have
+% one.
+screenRect = Screen('rect', displays(end)); % get the screen size of the monitor we're presenting the data on.
+[x0,y0] = RectCenter(screenRect); %sets Center for screenRect (x,y)
+window=Screen('OpenWindow', displays(end),[0 0 0], screenRect, 32);
+% open up a window on the selected monitor, [0 0 0] is RGB color, so it's
+% black here, screenRect is for presenting it all over the screen, and we
+% always use 32-bit color.
+
+%% task instruction
+Screen('TextSize',window, 40);
+instruction = 'Each picture will be briefly presented in "WHOLE" version first, and then change into the "PART" version in which only a small part of the whole picture is visible. \n Sometimes, the "PART" picture may be misleading or ambiguous about what the picture is about. \n\n Pay close attention to both "WHOLE" and "PART" versions of each picture, press 1 when the picture changes from "WHOLE" to "PART"';
+
+DrawFormattedText(window, instruction, 'center','center',255,50,0,0,1.3)
+Screen('Flip', window);
+% 
+% space_index = find(instructions == ' ');
+% space_breaks = round(length(space_index)/6);
+% Screen(window, 'TextSize', 36);
+% Screen(window, 'DrawText', instructions(1:space_index(space_breaks)), x0-600, y0-200, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks)+1:space_index(space_breaks*2)), x0-600, y0-140, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks*2)+1:space_index(space_breaks*3)), x0-600, y0-80, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks*3)+1:space_index(space_breaks*4)), x0-600, y0-20, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks*4)+1:space_index(space_breaks*5)), x0-600, y0+40, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks*5)+1:space_index(space_breaks*6)), x0-600, y0+100, 255);
+% Screen(window, 'DrawText', instructions(space_index(space_breaks*6)+1:end), x0-600, y0+160, 255);
+% 
+% Screen('Flip',window);
+Response_pic = zeros(trialsPerRun,3);
+Response_pic(:,1) = design'; % first column is condition, second column is key, third column is RT
+%% Experiment
+
+% reset all keys, wait for trigger pulse from the scanner
+while 1
+    FlushEvents;
+    trig = GetChar;
+    if trig == '+'
+        break
+    end
+end
+
+experimentStart = GetSecs;
+picture_list = {};
+% trial loop
+for trial = 1:trialsPerRun
+    trialStart  = GetSecs;
+    thiscondnum = design(trial);
+    itemcounter(thiscondnum,run) = itemcounter(thiscondnum,run) + 1;
+    thisitem    = itemorder{thiscondnum}(itemcounter(thiscondnum,run),run);
+    % thiscondnum refers to which condition we're presenting in this trial.
+    % 1 is misleading and on
+    
+    if design(trial)==1
+        cd(misleadingdir);
+        condstr = 'm';
+    elseif design(trial)==2
+        cd(ambiguousdir);
+        condstr = 'a';
+    else
+        cd(veridicaldir);
+        condstr = 'v';
+    end
+    
+    % present fixation cross
+    DrawFormattedText(window,'+','center','center',255);
+    Screen('Flip',window);
+    
+    %present the whole picture
+    wholepic_name  = sprintf('%s_whole_%d.jpg',condstr,thisitem);
+    picture_list{trial,1} = wholepic_name;
+    whole_array = imread(wholepic_name);
+    wholepic = Screen('MakeTexture',window,whole_array);
+    Screen('DrawTexture',window,wholepic,[],[x0-525 y0-400 x0+525 y0+250]);
+    while GetSecs - trialStart < fixDur; end % wait for the fix to end
+    Screen('Flip',window);% flip the whole pic
+    
+    %present the part picture
+    partpic_name  = sprintf('%s_part_%d.jpg',condstr,thisitem);
+    partpic_array = imread(partpic_name);
+    partpic = Screen('MakeTexture',window,partpic_array);
+    Screen('DrawTexture',window,partpic,[],[x0-525 y0-400 x0+525 y0+250]);
+    while GetSecs - trialStart < fixDur + wholepicDur; end
+    Screen('Flip',window); %flip the part pic
+    
+    responseStart = GetSecs;
+
+    % starts getting response after the part picture's flipped.
+    while GetSecs - trialStart < fixDur + wholepicDur + partpicDur;
+        [keyIsDown,secs,keyCode] = KbCheck(-3);
+        
+%        OLD WAY 
+%         
+%         button = intersect(keynums, find(keyCode));
+%         if(Response_pic(trial,3) == 0) & button > 24 %
+%             Response_pic(trial,3) = GetSecs - responseStart;
+%             thiskey = KbName(button);
+%             Response_pic(trial,2) = str2num(thiskey(1));
+%         end
+ 
+     if keyIsDown
+            button = find(keyCode);
+            button = KbName(button(1));
+            if any(button(1)=='1234')
+                if Response_pic(trial,3)==0
+                    Response_pic(trial,3) = GetSecs-responseStart;
+                    Response_pic(trial,2) = str2num(button(1));
+                end
+            end
+        end    
+        
+       [Response_pic(trial,2) Response_pic(trial,3)]
+        
+        
+    end
+    while GetSecs - trialStart < fixDur+wholepicDur+partpicDur; end  % make sure the trial doesnt end b/c psychtoolbox timing is off
+end % end of trial loop
+
+DrawFormattedText(window,'+','center','center',255);
+Screen('Flip',window);
+experimentEnd = GetSecs;
+while GetSecs - experimentEnd < fixDur; end % wait one last fixation
+
+experimentDuration = experimentEnd - experimentStart;
+
+save([fullfile(rootdir,'behavioural_new') '/' subjID '.xplane3_1_new_singlerun.mat'],'picture_list','Response_pic','subjID','run','design','itemorder','experimentDuration');
+
+
+cd(rootdir)
+ShowCursor;
+clear all
+
+end
